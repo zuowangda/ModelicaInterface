@@ -51,7 +51,6 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
 {
   ModelicaSharedData modelicaData;
   HANDLE hMapFile;
-  LPCTSTR pBuf;
   ModelicaSharedData *modelicaDataBuf;
   ffdSharedData *ffdData;
   int i, imax = 10000;
@@ -89,7 +88,7 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
 
   // Looking for the shared memory
   i = 0;
-  while(modelicaDataBuf == NULL && i < imax)
+  while(modelicaDataBuf==NULL && i<imax)
   {
     Sleep(10000);
     printf("Wait for shared memory to be created\n");
@@ -100,9 +99,11 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
               BUF_MODELICA_SIZE);
     i++;
   }
-  if(i >= imax)
+
+  if(modelicaDataBuf==NULL && i>=imax)
   {
-    printf("interface.c: Cosimulation failed due to error in got the shared memory after %s loops\n.", i);
+    printf("interface.c: Cosimulation failed due to error in mapping the shared memory for modelica data after %d loops\n."
+          , i);
     exit(1);
   }
 
@@ -119,13 +120,24 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
                   FALSE,                 // do not inherit the name
                   ffdDataName);               // name of mapping object
 
-  while (hMapFile == NULL)
+  // Continue check unitl get the map
+  i = 0;
+  while(hMapFile==NULL && i<imax)
   {
     hMapFile = OpenFileMapping(
                   FILE_MAP_ALL_ACCESS,   // read/write access
                   FALSE,                 // do not inherit the name
                   ffdDataName);               // name of mapping object
+    i++;
   }
+  // Quit with warning if cannot get map after imax times
+  if(hMapFile == NULL && i >= imax)
+  {
+    printf("interface.c: Cosimulation failed due to error in opening file mapping for FFD data after %d loops\n."
+          , i);
+    exit(1);
+  }
+
 
   ffdData = (ffdSharedData *) MapViewOfFile(hMapFile, // handle to map object
               FILE_MAP_ALL_ACCESS,  // read/write permission
