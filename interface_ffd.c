@@ -72,26 +72,35 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
                   FALSE,                 // do not inherit the name
                   modelicaDataName);               // name of mapping object
 
-  while (hMapFile == NULL)
+  i = 0;
+  // Check again if map is not open and iteration does not reach the limit
+  while(hMapFile==NULL && i<imax)
   {
+    Sleep(100);
     hMapFile = OpenFileMapping(
                   FILE_MAP_ALL_ACCESS,   // read/write access
                   FALSE,                 // do not inherit the name
                   modelicaDataName);               // name of mapping object
   }
+  if(hMapFile==NULL && i>=imax)
+  {
+    printf("interface.c: Cosimulation failed due to error in mapping the shared memory for modelica data after %d loops\n."
+          , i);
+    exit(1);
+  }
 
+  // Map the file
   modelicaDataBuf = (ModelicaSharedData *) MapViewOfFile(hMapFile, // handle to map object
               FILE_MAP_ALL_ACCESS,  // read/write permission
               0,
               0,
               BUF_MODELICA_SIZE);
 
-  // Looking for the shared memory
+  // Check again if map view is not ready and iteration doesnot reach the limit
   i = 0;
   while(modelicaDataBuf==NULL && i<imax)
   {
-    Sleep(10000);
-    printf("Wait for shared memory to be created\n");
+    Sleep(100);
     modelicaDataBuf = (ModelicaSharedData *) MapViewOfFile(hMapFile, // handle to map object
               FILE_MAP_ALL_ACCESS,  // read/write permission
               0,
@@ -100,6 +109,7 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
     i++;
   }
 
+  // Quit with error if wait after imax iterations
   if(modelicaDataBuf==NULL && i>=imax)
   {
     printf("interface.c: Cosimulation failed due to error in mapping the shared memory for modelica data after %d loops\n."
@@ -130,6 +140,7 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
                   ffdDataName);               // name of mapping object
     i++;
   }
+
   // Quit with warning if cannot get map after imax times
   if(hMapFile == NULL && i >= imax)
   {
@@ -138,13 +149,14 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
     exit(1);
   }
 
-
+  // Get the wanted shared memory data
   ffdData = (ffdSharedData *) MapViewOfFile(hMapFile, // handle to map object
               FILE_MAP_ALL_ACCESS,  // read/write permission
               0,
               0,
               BUF_FFD_SIZE);
 
+  // If the data is not ready or not updated, check again
   while(ffdData == NULL || ffdData->command == -1)
   {
     Sleep(100);
@@ -167,6 +179,8 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
   printf("y2 = %d\n", y2);
   printf("y3 = %s\n", y3);
   printf("ffdData->message=%s\n", ffdData->message);
+
+  // Close the mao abd handle
   UnmapViewOfFile(ffdData);
   CloseHandle(hMapFile);
 } // End of exchangeData()
