@@ -3,7 +3,7 @@
 #include <conio.h>
 #include <tchar.h>
 
-#include "interface_ffd.h"
+#include "Debug/interface_ffd.h"
 
 #pragma comment(lib, "user32.lib")
 
@@ -148,4 +148,5 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
   printf("ffdData->message=%s\n", ffdData->message);
   UnmapViewOfFile(ffdData);
   CloseHandle(hMapFile);
+  getchar();
 }
