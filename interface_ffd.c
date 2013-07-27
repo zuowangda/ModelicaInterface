@@ -54,6 +54,7 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
   LPCTSTR pBuf;
   ModelicaSharedData *modelicaDataBuf;
   ffdSharedData *ffdData;
+  int i, imax = 10000;
   int y2;
   char y3[20];
 
@@ -86,15 +87,23 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
               0,
               BUF_MODELICA_SIZE);
 
-  while(modelicaDataBuf == NULL)
+  // Looking for the shared memory
+  i = 0;
+  while(modelicaDataBuf == NULL && i < imax)
   {
-    Sleep(100);
+    Sleep(10000);
     printf("Wait for shared memory to be created\n");
     modelicaDataBuf = (ModelicaSharedData *) MapViewOfFile(hMapFile, // handle to map object
               FILE_MAP_ALL_ACCESS,  // read/write permission
               0,
               0,
               BUF_MODELICA_SIZE);
+    i++;
+  }
+  if(i >= imax)
+  {
+    printf("interface.c: Cosimulation failed due to error in got the shared memory after %s loops\n.", i);
+    exit(1);
   }
 
   // Copy a block of memory from modelicaData to modelicaDataBuf
@@ -148,5 +157,4 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
   printf("ffdData->message=%s\n", ffdData->message);
   UnmapViewOfFile(ffdData);
   CloseHandle(hMapFile);
-  getchar();
-}
+} // End of exchangeData()
