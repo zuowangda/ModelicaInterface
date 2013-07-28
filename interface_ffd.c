@@ -14,14 +14,15 @@ TCHAR ffdDataName[] = TEXT("FFDDataMappingObject");
 TCHAR modelicaDataName[] = TEXT("ModelicaDataMappingObject");
 
 typedef struct {
+  float t;
+  int status;
   float number[3];
-  int command;
   char message[20];
 }ffdSharedData;
 
 typedef struct {
-  float number;
-  int command;
+  float t;
+  int status;
   float arr[3];
   char message[30];
 }ModelicaSharedData;
@@ -47,7 +48,7 @@ int instantiate(){
 /******************************************************************************
 | Exchange data between Modelica and Shared Memory
 ******************************************************************************/
-void exchangeData(double *x1, int x2, char *x3, double *y1)
+void exchangeData(double *x1, float t, char *x3, double *y1)
 {
   ModelicaSharedData modelicaData;
   HANDLE hMapFile;
@@ -60,12 +61,16 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
   modelicaData.arr[0] = (float) x1[0];
   modelicaData.arr[1] = (float) x1[1];
   modelicaData.arr[2] = (float) x1[2];
-  modelicaData.number = (float) x1[3];
-  modelicaData.command = x2;
+  modelicaData.t = (float) t;
+  modelicaData.status = 1;
   strcpy(modelicaData.message, x3);
 
   /*--------------------------------------------------------------------------
   | Write data to FFD
+  | Command: 
+  | -1: feak data
+  |  0: data has been read by the other program
+  |  1: data waiting for the other program to read
   --------------------------------------------------------------------------*/
   hMapFile = OpenFileMapping(
                   FILE_MAP_ALL_ACCESS,   // read/write access
@@ -84,7 +89,7 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
   }
   if(hMapFile==NULL && i>=imax)
   {
-    printf("interface.c: Cosimulation failed due to error in mapping the shared memory for modelica data after %d loops\n."
+    printf("interface.c: Cosimulation failed due to error in mapping the shared memory for modelica data after %d times\n."
           , i);
     exit(1);
   }
@@ -117,6 +122,10 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
     exit(1);
   }
 
+  // If previous data hasn't been read, wait
+  while(modelicaDataBuf->status==1)
+    Sleep(10000);
+
   // Copy a block of memory from modelicaData to modelicaDataBuf
   CopyMemory((PVOID)modelicaDataBuf, &modelicaData, sizeof(ModelicaSharedData));
   UnmapViewOfFile(modelicaDataBuf);
@@ -142,7 +151,7 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
   }
 
   // Quit with warning if cannot get map after imax times
-  if(hMapFile == NULL && i >= imax)
+  if(hMapFile==NULL && i>=imax)
   {
     printf("interface.c: Cosimulation failed due to error in opening file mapping for FFD data after %d loops\n."
           , i);
@@ -157,9 +166,9 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
               BUF_FFD_SIZE);
 
   // If the data is not ready or not updated, check again
-  while(ffdData == NULL || ffdData->command == -1)
+  while(ffdData==NULL || ffdData->status!=1)
   {
-    Sleep(100);
+    Sleep(1000);
     ffdData = (ffdSharedData *) MapViewOfFile(hMapFile, // handle to map object
               FILE_MAP_ALL_ACCESS,  // read/write permission
               0,
@@ -171,16 +180,22 @@ void exchangeData(double *x1, int x2, char *x3, double *y1)
   y1[0] = ffdData->number[0];
   y1[1] = ffdData->number[1];
   y1[2] = ffdData->number[2];
-  y2 = ffdData->command;
+  y2 = ffdData->status;
   strcpy(y3, ffdData->message);
 
-  printf("Data got from FFD\n");
+  printf("Data got from FFD at time=%f\n", ffdData->t);
+  printf("status = %d\n", y2);
   printf("y1[0] = %f, y1[1] = %f, y1[2] = %f \n", y1[0], y1[1], y1[2]);
-  printf("y2 = %d\n", y2);
+
   printf("y3 = %s\n", y3);
   printf("ffdData->message=%s\n", ffdData->message);
 
-  // Close the mao abd handle
+  // Fixme: Try to update the memory directly
+  // Update the data status
+  ffdData->status = 0;
+  //printf("ffdData->status = %d\n", ffdData->status);
+
+  // Close the map and handle
   UnmapViewOfFile(ffdData);
   CloseHandle(hMapFile);
 } // End of exchangeData()
