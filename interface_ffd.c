@@ -183,12 +183,13 @@ void exchangeData(double *x1, float t, char *x3, double *y1)
   y2 = ffdData->status;
   strcpy(y3, ffdData->message);
 
-  printf("Data got from FFD at time=%f\n", ffdData->t);
-  printf("status = %d\n", y2);
+  printf("\n FFD: time=%f, status=%d\n", ffdData->t,ffdData->status);
   printf("y1[0] = %f, y1[1] = %f, y1[2] = %f \n", y1[0], y1[1], y1[2]);
+  printf("Modelica: time=%f, status=%d\n", modelicaData.t,modelicaData.status);
+  printf("arr[0] = %f, arr[1] = %f, arr[2] = %f \n", modelicaData.arr[0], modelicaData.arr[1], modelicaData.arr[2]);
 
-  printf("y3 = %s\n", y3);
-  printf("ffdData->message=%s\n", ffdData->message);
+  //printf("y3 = %s\n", y3);
+  //printf("ffdData->message=%s\n", ffdData->message);
 
   // Fixme: Try to update the memory directly
   // Update the data status

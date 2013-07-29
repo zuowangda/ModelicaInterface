@@ -7,7 +7,6 @@ package DllTest "Test package for dll"
 
   model ChangeDll
   Real x1[4];
-
   Integer x2;
   Real y[3];
   initial equation
@@ -18,7 +17,10 @@ package DllTest "Test package for dll"
     x1[3] = 3;
     x1[4] = 4;
     x2 = 0;
+    when sample(0, 0.1) then
     y = DllTest.change(x1, time);
+    end when;
+
      annotation (experiment(__Dymola_fixedstepsize=0.1, __Dymola_Algorithm="Euler"),
         __Dymola_experimentSetupOutput);
   end ChangeDll;
