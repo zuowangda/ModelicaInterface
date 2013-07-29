@@ -31,7 +31,8 @@ typedef struct {
 /******************************************************************************
 | Start the memory management and FFD
 ******************************************************************************/
-int instantiate(){
+int instantiate()
+{
   int status;
 
   // Launch the memory management tool
@@ -200,3 +201,30 @@ void exchangeData(double *x1, float t, char *x3, double *y1)
   UnmapViewOfFile(ffdData);
   CloseHandle(hMapFile);
 } // End of exchangeData()
+
+/******************************************************************************
+| Terminate the memory management program
+******************************************************************************/
+void terminate_cosimulation( )
+{
+  HANDLE hMapFile;
+  ModelicaSharedData *modelicaData;
+
+  hMapFile = OpenFileMapping(
+                  FILE_MAP_ALL_ACCESS,   // read/write access
+                  FALSE,                 // do not inherit the name
+                  modelicaDataName);               // name of mapping object
+
+  // Get the wanted shared memory data
+  modelicaData = (ModelicaSharedData *) MapViewOfFile(hMapFile, // handle to map object
+              FILE_MAP_ALL_ACCESS,  // read/write permission
+              0,
+              0,
+              BUF_MODELICA_SIZE);
+
+  // Set signal to close memory management
+  modelicaData->status = -2;
+  UnmapViewOfFile(modelicaData);
+  CloseHandle(hMapFile);
+
+} // End of terminate()

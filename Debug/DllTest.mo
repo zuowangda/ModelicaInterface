@@ -19,6 +19,7 @@ package DllTest "Test package for dll"
     x2 = 0;
     when sample(0, 0.1) then
     y = DllTest.change(x1, time);
+
     end when;
 
      annotation (experiment(__Dymola_fixedstepsize=0.1, __Dymola_Algorithm="Euler"),
@@ -32,5 +33,10 @@ package DllTest "Test package for dll"
   external"C"  exchangeData(x1, t, "Modelica Data", y);
     annotation (Include="#include <interface_ffd.h>", Library="ModelicaInterface");
   end change;
+
+  function terminate "End the cosimulation"
+  external"C" terminate_cosimulation();
+    annotation (Include="#include <interface_ffd.h>", Library="ModelicaInterface");
+  end terminate;
   annotation (uses(Modelica(version="3.2")));
 end DllTest;
