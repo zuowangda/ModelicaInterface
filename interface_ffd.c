@@ -37,7 +37,7 @@ ModelicaSharedData *modelicaDataBuf;
 ******************************************************************************/
 int instantiate()
 {
-  int status;
+  printf("interface_ffd.c: start to create shared memory.\n");
 
   /*---------------------------------------------------------------------------
   | Create named file mapping objects for specified files
@@ -105,11 +105,8 @@ int instantiate()
   ffdDataBuf->status = -1;
   modelicaDataBuf->status = -1;
 
-  // Use start to creat a new window for FFD; like fork the process
-  status = system("start ..\\..\\Fast-Fluid-Dynamics\\Debug\\FFD_SCI.exe"); 
-  printf("Launch FFD with status: %d\n", status);
-
-  return status;
+  printf("interface_ffd.c: initialized shared memory.\n");
+  return 0;
 } // End of instantiate()
 
 
@@ -118,7 +115,7 @@ int instantiate()
 ******************************************************************************/
 void exchangeData(double *x1, float t, char *x3, double *y1)
 {
-  int i, imax = 10000;
+  int imax = 10000;
   int y2;
   char y3[20];
 
@@ -129,7 +126,6 @@ void exchangeData(double *x1, float t, char *x3, double *y1)
   |  0: data has been read by the other program
   |  1: data waiting for the other program to read
   --------------------------------------------------------------------------*/
-
   // If previous data hasn't been read, wait
   while(modelicaDataBuf->status==1)
     Sleep(1000);
