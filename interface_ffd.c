@@ -2,13 +2,13 @@
 #include <windows.h>
 #include <conio.h>
 #include <tchar.h>
-
 #include "Debug/interface_ffd.h"
 
-#pragma comment(lib, "user32.lib")
-
+#define BUF_SIZE 256
 #define BUF_FFD_SIZE (sizeof(ffdSharedData))
 #define BUF_MODELICA_SIZE (sizeof(ModelicaSharedData))
+
+#pragma comment(lib, "user32.lib")
 
 TCHAR ffdDataName[] = TEXT("FFDDataMappingObject");
 TCHAR modelicaDataName[] = TEXT("ModelicaDataMappingObject");
@@ -27,6 +27,10 @@ typedef struct {
   char message[30];
 }ModelicaSharedData;
 
+HANDLE ffdDataMapFile;
+HANDLE modelicaDataMapFile;
+ffdSharedData *ffdDataBuf;
+ModelicaSharedData *modelicaDataBuf;
 
 /******************************************************************************
 | Start the memory management and FFD
@@ -35,9 +39,72 @@ int instantiate()
 {
   int status;
 
-  // Launch the memory management tool
-  status = system("start ..\\..\\MemoryManagement\\Debug\\MemoryManagement.exe"); 
-  printf("Launch MemoryManagement with status: %d\n", status);
+  /*---------------------------------------------------------------------------
+  | Create named file mapping objects for specified files
+  ---------------------------------------------------------------------------*/
+  ffdDataMapFile = CreateFileMapping(
+                INVALID_HANDLE_VALUE,    // use paging file
+                NULL,                    // default security
+                PAGE_READWRITE,          // read/write access
+                0,                       // maximum object size (high-order DWORD)
+                BUF_FFD_SIZE,                // maximum object size (low-order DWORD)
+                ffdDataName);                 // name of mapping object
+  modelicaDataMapFile = CreateFileMapping(
+                INVALID_HANDLE_VALUE,    // use paging file
+                NULL,                    // default security
+                PAGE_READWRITE,          // read/write access
+                0,                       // maximum object size (high-order DWORD)
+                BUF_MODELICA_SIZE,                // maximum object size (low-order DWORD)
+                modelicaDataName);                 // name of mapping object
+
+  // Send warning if can not create shared memory
+  if(ffdDataMapFile==NULL)
+  {
+    printf("Could not create file mapping object (%d).\n", 
+            GetLastError());
+    return 1;
+  }
+  if(modelicaDataMapFile==NULL)
+  {
+    printf("Could not create file mapping object (%d).\n", 
+            GetLastError());
+    return 1;
+  }
+
+  /*---------------------------------------------------------------------------
+  | Mps a view of a file mapping into the address space of a calling process
+  ---------------------------------------------------------------------------*/
+  ffdDataBuf = (ffdSharedData *) MapViewOfFile(ffdDataMapFile,   // handle to map object
+                      FILE_MAP_ALL_ACCESS, // read/write permission
+                      0,
+                      0,
+                      BUF_FFD_SIZE);
+  modelicaDataBuf = (ModelicaSharedData *) MapViewOfFile(modelicaDataMapFile,   // handle to map object
+                      FILE_MAP_ALL_ACCESS, // read/write permission
+                      0,
+                      0,
+                      BUF_MODELICA_SIZE);
+
+  if(ffdDataBuf == NULL)
+  {
+    printf("Could not map view of file (%d).\n",
+            GetLastError());
+    CloseHandle(ffdDataMapFile);
+    return 1;
+  }
+
+  if(modelicaDataBuf == NULL) 
+  {
+    printf("Could not map view of file (%d).\n",
+            GetLastError());
+    CloseHandle(modelicaDataMapFile);
+    return 1;
+  }
+
+  // Set the status to -1
+  ffdDataBuf->status = -1;
+  modelicaDataBuf->status = -1;
+
   // Use start to creat a new window for FFD; like fork the process
   status = system("start ..\\..\\Fast-Fluid-Dynamics\\Debug\\FFD_SCI.exe"); 
   printf("Launch FFD with status: %d\n", status);
@@ -51,20 +118,9 @@ int instantiate()
 ******************************************************************************/
 void exchangeData(double *x1, float t, char *x3, double *y1)
 {
-  ModelicaSharedData modelicaData;
-  HANDLE hMapFile;
-  ModelicaSharedData *modelicaDataBuf;
-  ffdSharedData *ffdData;
   int i, imax = 10000;
   int y2;
   char y3[20];
-
-  modelicaData.arr[0] = (float) x1[0];
-  modelicaData.arr[1] = (float) x1[1];
-  modelicaData.arr[2] = (float) x1[2];
-  modelicaData.t = (float) t;
-  modelicaData.status = 1;
-  strcpy(modelicaData.message, x3);
 
   /*--------------------------------------------------------------------------
   | Write data to FFD
@@ -73,133 +129,37 @@ void exchangeData(double *x1, float t, char *x3, double *y1)
   |  0: data has been read by the other program
   |  1: data waiting for the other program to read
   --------------------------------------------------------------------------*/
-  hMapFile = OpenFileMapping(
-                  FILE_MAP_ALL_ACCESS,   // read/write access
-                  FALSE,                 // do not inherit the name
-                  modelicaDataName);               // name of mapping object
-
-  i = 0;
-  // Check again if map is not open and iteration does not reach the limit
-  while(hMapFile==NULL && i<imax)
-  {
-    Sleep(100);
-    hMapFile = OpenFileMapping(
-                  FILE_MAP_ALL_ACCESS,   // read/write access
-                  FALSE,                 // do not inherit the name
-                  modelicaDataName);               // name of mapping object
-  }
-  if(hMapFile==NULL && i>=imax)
-  {
-    printf("interface.c: Cosimulation failed due to error in mapping the shared memory for modelica data after %d times\n."
-          , i);
-    exit(1);
-  }
-
-  // Map the file
-  modelicaDataBuf = (ModelicaSharedData *) MapViewOfFile(hMapFile, // handle to map object
-              FILE_MAP_ALL_ACCESS,  // read/write permission
-              0,
-              0,
-              BUF_MODELICA_SIZE);
-
-  // Check again if map view is not ready and iteration doesnot reach the limit
-  i = 0;
-  while(modelicaDataBuf==NULL && i<imax)
-  {
-    Sleep(100);
-    modelicaDataBuf = (ModelicaSharedData *) MapViewOfFile(hMapFile, // handle to map object
-              FILE_MAP_ALL_ACCESS,  // read/write permission
-              0,
-              0,
-              BUF_MODELICA_SIZE);
-    i++;
-  }
-
-  // Quit with error if wait after imax iterations
-  if(modelicaDataBuf==NULL && i>=imax)
-  {
-    printf("interface.c: Cosimulation failed due to error in mapping the shared memory for modelica data after %d loops\n."
-          , i);
-    exit(1);
-  }
 
   // If previous data hasn't been read, wait
   while(modelicaDataBuf->status==1)
-    Sleep(10000);
+    Sleep(1000);
 
   // Copy a block of memory from modelicaData to modelicaDataBuf
-  CopyMemory((PVOID)modelicaDataBuf, &modelicaData, sizeof(ModelicaSharedData));
-  UnmapViewOfFile(modelicaDataBuf);
-  CloseHandle(hMapFile);
-
-  /*--------------------------------------------------------------------------
-  | Read FFD data from shared memory
-  --------------------------------------------------------------------------*/
-  hMapFile = OpenFileMapping(
-                  FILE_MAP_ALL_ACCESS,   // read/write access
-                  FALSE,                 // do not inherit the name
-                  ffdDataName);               // name of mapping object
-
-  // Continue check unitl get the map
-  i = 0;
-  while(hMapFile==NULL && i<imax)
-  {
-    hMapFile = OpenFileMapping(
-                  FILE_MAP_ALL_ACCESS,   // read/write access
-                  FALSE,                 // do not inherit the name
-                  ffdDataName);               // name of mapping object
-    i++;
-  }
-
-  // Quit with warning if cannot get map after imax times
-  if(hMapFile==NULL && i>=imax)
-  {
-    printf("interface.c: Cosimulation failed due to error in opening file mapping for FFD data after %d loops\n."
-          , i);
-    exit(1);
-  }
-
-  // Get the wanted shared memory data
-  ffdData = (ffdSharedData *) MapViewOfFile(hMapFile, // handle to map object
-              FILE_MAP_ALL_ACCESS,  // read/write permission
-              0,
-              0,
-              BUF_FFD_SIZE);
+  modelicaDataBuf->arr[1] = (float) x1[1];
+  modelicaDataBuf->arr[2] = (float) x1[2];
+  modelicaDataBuf->t = (float) t;
+  modelicaDataBuf->status = 1;
+  strcpy(modelicaDataBuf->message, x3);
 
   // If the data is not ready or not updated, check again
-  while(ffdData==NULL || ffdData->status!=1)
-  {
+  while(ffdDataBuf->status!=1)
     Sleep(1000);
-    ffdData = (ffdSharedData *) MapViewOfFile(hMapFile, // handle to map object
-              FILE_MAP_ALL_ACCESS,  // read/write permission
-              0,
-              0,
-              BUF_FFD_SIZE);
-  }
 
   // Copy a block of memory from ffdData
-  y1[0] = ffdData->number[0];
-  y1[1] = ffdData->number[1];
-  y1[2] = ffdData->number[2];
-  y2 = ffdData->status;
-  strcpy(y3, ffdData->message);
+  y1[0] = ffdDataBuf->number[0];
+  y1[1] = ffdDataBuf->number[1];
+  y1[2] = ffdDataBuf->number[2];
+  y2 = ffdDataBuf->status;
+  strcpy(y3, ffdDataBuf->message);
 
-  printf("\n FFD: time=%f, status=%d\n", ffdData->t,ffdData->status);
+  printf("\n FFD: time=%f, status=%d\n", ffdDataBuf->t,ffdDataBuf->status);
   printf("y1[0] = %f, y1[1] = %f, y1[2] = %f \n", y1[0], y1[1], y1[2]);
-  printf("Modelica: time=%f, status=%d\n", modelicaData.t,modelicaData.status);
-  printf("arr[0] = %f, arr[1] = %f, arr[2] = %f \n", modelicaData.arr[0], modelicaData.arr[1], modelicaData.arr[2]);
+  printf("Modelica: time=%f, status=%d\n", modelicaDataBuf->t,modelicaDataBuf->status);
+  printf("arr[0] = %f, arr[1] = %f, arr[2] = %f \n", modelicaDataBuf->arr[0], modelicaDataBuf->arr[1], modelicaDataBuf->arr[2]);
 
-  //printf("y3 = %s\n", y3);
-  //printf("ffdData->message=%s\n", ffdData->message);
-
-  // Fixme: Try to update the memory directly
   // Update the data status
-  ffdData->status = 0;
-  //printf("ffdData->status = %d\n", ffdData->status);
+  ffdDataBuf->status = 0;
 
-  // Close the map and handle
-  UnmapViewOfFile(ffdData);
-  CloseHandle(hMapFile);
 } // End of exchangeData()
 
 /******************************************************************************
@@ -207,24 +167,30 @@ void exchangeData(double *x1, float t, char *x3, double *y1)
 ******************************************************************************/
 void terminate_cosimulation( )
 {
-  HANDLE hMapFile;
-  ModelicaSharedData *modelicaData;
+  if(!UnmapViewOfFile(ffdDataBuf))
+    printf("Error in closing map view %d\n", GetLastError());
+  else
+    printf("Successfully closed data buffer for FFD.\n");
+  
+  if(!UnmapViewOfFile(modelicaDataBuf))
+    printf("Error in closing map view %d\n", GetLastError());
+  else
+    printf("Successfully closed data buffer for Modelica.\n");
+  
+  if(!CloseHandle(ffdDataMapFile))
+    printf("Error in closing handle %d\n", GetLastError());
+  else
+    printf("Successfully closed handle for FFD.\n");
 
-  hMapFile = OpenFileMapping(
-                  FILE_MAP_ALL_ACCESS,   // read/write access
-                  FALSE,                 // do not inherit the name
-                  modelicaDataName);               // name of mapping object
+  if(!CloseHandle(modelicaDataMapFile))
+    printf("Error in closing handle %d\n", GetLastError());
+  else
+    printf("Successfully closed handle for Modelica.\n");
 
-  // Get the wanted shared memory data
-  modelicaData = (ModelicaSharedData *) MapViewOfFile(hMapFile, // handle to map object
-              FILE_MAP_ALL_ACCESS,  // read/write permission
-              0,
-              0,
-              BUF_MODELICA_SIZE);
-
-  // Set signal to close memory management
-  modelicaData->status = -2;
-  UnmapViewOfFile(modelicaData);
-  CloseHandle(hMapFile);
-
+  getchar();
 } // End of terminate()
+
+
+
+
+
