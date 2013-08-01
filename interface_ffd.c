@@ -10,8 +10,8 @@
 
 #pragma comment(lib, "user32.lib")
 
-TCHAR ffdDataName[] = TEXT("FFDDataMappingObject");
-TCHAR modelicaDataName[] = TEXT("ModelicaDataMappingObject");
+//TCHAR ffdDataName[] = TEXT("FFDDataMappingObject");
+//TCHAR modelicaDataName[] = TEXT("ModelicaDataMappingObject");
 
 typedef struct {
   float t;
@@ -35,9 +35,17 @@ ModelicaSharedData *modelicaDataBuf;
 /******************************************************************************
 | Start the memory management and FFD
 ******************************************************************************/
-int instantiate()
+int instantiate(char *ffdDatNam, char *modDatNam)
 {
-  printf("interface_ffd.c: start to create shared memory.\n");
+  char msg[100];
+
+  sprintf(ffdDatNam, "ffd%d", rand());
+  //ffdDatNam = (char *) malloc(sizeof(msg));
+  //strcpy(ffdDatNam, msg);
+
+  sprintf(modDatNam, "mod%d", rand());
+  //modDatNam = (char *) malloc(sizeof(msg));
+  //strcpy(modDatNam, msg);
 
   /*---------------------------------------------------------------------------
   | Create named file mapping objects for specified files
@@ -48,14 +56,14 @@ int instantiate()
                 PAGE_READWRITE,          // read/write access
                 0,                       // maximum object size (high-order DWORD)
                 BUF_FFD_SIZE,                // maximum object size (low-order DWORD)
-                ffdDataName);                 // name of mapping object
+                ffdDatNam);                 // name of mapping object
   modelicaDataMapFile = CreateFileMapping(
                 INVALID_HANDLE_VALUE,    // use paging file
                 NULL,                    // default security
                 PAGE_READWRITE,          // read/write access
                 0,                       // maximum object size (high-order DWORD)
                 BUF_MODELICA_SIZE,                // maximum object size (low-order DWORD)
-                modelicaDataName);                 // name of mapping object
+                modDatNam);                 // name of mapping object
 
   // Send warning if can not create shared memory
   if(ffdDataMapFile==NULL)
@@ -105,7 +113,8 @@ int instantiate()
   ffdDataBuf->status = -1;
   modelicaDataBuf->status = -1;
 
-  printf("interface_ffd.c: initialized shared memory.\n");
+  printf("Created shared memory \"%s\" and \"%s\".\n", ffdDatNam, modDatNam);
+  getchar();
   return 0;
 } // End of instantiate()
 
