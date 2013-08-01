@@ -1,17 +1,19 @@
 within ;
 package DllTest "Test package for dll"
-  function createSharedMemory "Creat shared memory for data exchange"
-  external"C" instantiate();
+  function mapSharedMemory "map shared memory for data exchange"
+    output String ffdDatNam;
+    output String modDatNam;
+  external"C" create_mapping(ffdDatNam, modDatNam);
     annotation (Include="#include <interface_ffd.h>", Library=
           "ModelicaInterface");
-  end createSharedMemory;
+  end mapSharedMemory;
 
   model ChangeDll
     Real x1[4];
     Integer x2;
     Real y[3];
   initial equation
-  DllTest.instantiate();
+    DllTest.instantiate();
   equation
     x1[1] = 1;
     x1[2] = 2;
@@ -24,15 +26,14 @@ package DllTest "Test package for dll"
     end when;
 
     //when terminal() then
-      //Fixme: Need to free the memory
-      //DllTest.terminate();
+    //Fixme: Need to free the memory
+    //DllTest.terminate();
     //end when;
 
     annotation (experiment(
         StopTime=1.1,
         __Dymola_fixedstepsize=0.1,
-        __Dymola_Algorithm="Euler"),
-                      __Dymola_experimentSetupOutput);
+        __Dymola_Algorithm="Euler"), __Dymola_experimentSetupOutput);
   end ChangeDll;
 
   function change "change the variable in salve"
@@ -53,23 +54,31 @@ package DllTest "Test package for dll"
     annotation (Include="#include <interface_ffd.h>", Library=
           "ModelicaInterface");
   end terminate;
-  annotation (uses(Modelica(version="3.2")));
+
   function instantiate "Start teh cosimulation"
 
+  protected
+    String ffdDatNam;
+    String modDatNam;
+
   algorithm
-    DllTest.createSharedMemory();
-    DllTest.launchFFD();
+    (ffdDatNam,modDatNam) := DllTest.launchFFD();
+    (ffdDatNam,modDatNam) := DllTest.launchFFD();
+    //DllTest.mapSharedMemory(ffdDatNam, modDatNam);
+    DllTest.mapSharedMemory(ffdDatNam, modDatNam);
   end instantiate;
 
   function launchFFD "Launch FFD simulation"
-  external"C" ffd_dll();
-    annotation (Include="#include <ffd_dll.h>", Library=
-          "FFD-DLL");
+    input String ffdDatNam;
+    input String modDatNam;
+  external"C" ffd_dll(ffdDatNam, modDatNam);
+    annotation (Include="#include <ffd_dll.h>", Library="FFD-DLL");
   end launchFFD;
 
   model test
 
   equation
-  DllTest.launchFFD();
+    DllTest.launchFFD();
   end test;
+  annotation (uses(Modelica(version="3.2")));
 end DllTest;
