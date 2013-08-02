@@ -34,12 +34,13 @@ BoundarySharedData *boundaryDataBuf;
 /******************************************************************************
 | Start the memory management and FFD
 ******************************************************************************/
-int instantiate(int nSur, int nConExtWin, int nPorts, int sha,
-                char **name, float *are, float *til, int *bouCon)
+int instantiate(char **name, double *A, double *til, int *bouCon, int haveSensor,
+                char **sensorName, int haveShade, int nSur, int nSen,
+                int nConExtWin, int nPorts )
 {
   int i, nBou;
-  printf("interface_ffd.c: start to create shared memory.\n");
-
+  printf("interface_ffd.c: Start to create shared memory.\n");
+  getchar();
   /*---------------------------------------------------------------------------
   | Create named file mapping objects for specified files
   ---------------------------------------------------------------------------*/
@@ -62,7 +63,7 @@ int instantiate(int nSur, int nConExtWin, int nPorts, int sha,
                 NULL,                    // default security
                 PAGE_READWRITE,          // read/write access
                 0,                       // maximum object size (high-order DWORD)
-                BUF_MODELICA_SIZE,                // maximum object size (low-order DWORD)
+                BUF_BOUNDARY_SIZE,                // maximum object size (low-order DWORD)
                 boundaryDataName);                 // name of mapping object
 
   // Send warning if can not create shared memory
@@ -85,6 +86,7 @@ int instantiate(int nSur, int nConExtWin, int nPorts, int sha,
     return GetLastError();
   }
 
+  printf("interface-ffd.c: Created file objects.\n");
   /*---------------------------------------------------------------------------
   | Mps a view of a file mapping into the address space of a calling process
   ---------------------------------------------------------------------------*/
@@ -98,7 +100,7 @@ int instantiate(int nSur, int nConExtWin, int nPorts, int sha,
                       0,
                       0,
                       BUF_MODELICA_SIZE);
-  boundaryDataBuf = (BoundarySharedData *) MapViewOfFile(modelicaDataMapFile,   // handle to map object
+  boundaryDataBuf = (BoundarySharedData *) MapViewOfFile(boundaryDataMapFile,   // handle to map object
                       FILE_MAP_ALL_ACCESS, // read/write permission
                       0,
                       0,
@@ -126,27 +128,52 @@ int instantiate(int nSur, int nConExtWin, int nPorts, int sha,
     return 1;
   }
 
+  printf("interface-ffd.c: Created mapping.\n");
+
   /*---------------------------------------------------------------------------
   | allocate the memory and assign the data
   --------------------------------------------------------------------------*/
   boundaryDataBuf->nSur = nSur;
+  boundaryDataBuf->nSen = nSen;
   boundaryDataBuf->nConExtWin = nConExtWin;
   boundaryDataBuf->nPorts = nPorts;
-  boundaryDataBuf->sha = sha;
+  boundaryDataBuf->sha = haveShade;
+
+  printf("interface_ffd.c: Number of surfaces: %d\n", boundaryDataBuf->nSur);
+  printf("interface_ffd.c: Number of sensors: %d\n", boundaryDataBuf->nSen);
+  printf("interface_ffd.c: Number of exterior construction with windows: %d\n", boundaryDataBuf->nConExtWin);
+  printf("interface_ffd.c: have shade: %d\n", boundaryDataBuf->sha);
+
 
   nBou = nSur + nPorts;
 
-  name = (char**) malloc(nBou*sizeof(char *));
-  are = (float *) malloc(nSur*sizeof(float));
-  til = (float *) malloc(nSur*sizeof(float));
-  bouCon = (int *) malloc(nSur*sizeof(int));
-
+  boundaryDataBuf->name = (char**) malloc(nBou*sizeof(char *));
+  boundaryDataBuf->are = (float *) malloc(nSur*sizeof(float));
+  boundaryDataBuf->til = (float *) malloc(nSur*sizeof(float));
+  boundaryDataBuf->bouCon = (int *) malloc(nSur*sizeof(int));
+  
   for(i=0; i<nBou; i++) {
-    boundaryDataBuf->name[i] = (char *)malloc(sizeof(name[i]));
+    boundaryDataBuf->name[i] = (char *)malloc(sizeof(char) *strlen(name[i]));
     strcpy(boundaryDataBuf->name[i], name[i]);
-    boundaryDataBuf->are[i] = are[i];
+    printf("Boundary name:%s\n", boundaryDataBuf->name[i]);
+
+    boundaryDataBuf->are[i] = A[i];
+    printf("\tA->Area:%f->%f [m2]\n", A[i], boundaryDataBuf->are[i]);
+
     boundaryDataBuf->til[i] = til[i];
+    printf("\tTilt->Tilt:%f->%f [deg]\n", til[i], boundaryDataBuf->til[i]);
+
     boundaryDataBuf->bouCon[i] = bouCon[i];
+    printf("\tbouCon->bouCon:%d->%d \n\n", bouCon[i], boundaryDataBuf->bouCon[i]);
+  }
+
+  if(haveSensor) {
+    boundaryDataBuf->sensorName = (char **) malloc(nSen*sizeof(char *));
+    for(i=0; i<nSen; i++) {
+      boundaryDataBuf->sensorName[i] = (char *)malloc(sizeof(char) * strlen(sensorName[i]));
+      strcpy(boundaryDataBuf->sensorName[i], sensorName[i]);
+      printf("Sensor Name:%s\n", boundaryDataBuf->sensorName[i]);
+    }
   }
 
   modelicaDataBuf->flag = -1;
@@ -154,7 +181,7 @@ int instantiate(int nSur, int nConExtWin, int nPorts, int sha,
 
   modelicaDataBuf->temHea = (float *) malloc(nSur * sizeof(float));
   // Having a shade for window
-  if(sha==1) {
+  if(haveShade==1) {
     modelicaDataBuf->shaConSig = (float *) malloc(nConExtWin * sizeof(float));
     modelicaDataBuf->shaAbsRad = (float *) malloc(nConExtWin * sizeof(float));
   }
@@ -165,12 +192,13 @@ int instantiate(int nSur, int nConExtWin, int nPorts, int sha,
 
 
   ffdDataBuf->temHea = (float *) malloc(nSur * sizeof(float));
-  if(sha==1) ffdDataBuf->TSha = (float *) malloc(nConExtWin * sizeof(float));
+  if(haveShade==1) ffdDataBuf->TSha = (float *) malloc(nConExtWin * sizeof(float));
   ffdDataBuf->TPor = (float *) malloc(nPorts * sizeof(float));
   ffdDataBuf->XiPor = (float *) malloc(nPorts * sizeof(float));
   ffdDataBuf->CPor = (float *) malloc(nPorts * sizeof(float));
   
   printf("interface_ffd.c: initialized shared memory.\n");
+  getchar();
   return 0;
 } // End of instantiate()
 
@@ -178,13 +206,10 @@ int instantiate(int nSur, int nConExtWin, int nPorts, int sha,
 /******************************************************************************
 | Exchange data between Modelica and Shared Memory
 ******************************************************************************/
-void exchangeData(double t0, double dt, double *temHea0, double heaConvec, 
-                  double *shaConSig, double *shaAbsRad, double p, 
-                  double *mFloRatPor0, double *TPor0, double *XiPor0, double *CPor0,
-                  double t1, double *temHea1, double TRoo, double *TSha, 
-                  double *TPor1, double *XiPor1, double *CPor1)
+int exchangeData(double t0, double dt, double *u, int nU, int nY, 
+                 double t1, double *y)
 {
-  int i, imax = 10000;
+  int i, j, imax = 10000;
 
   /*--------------------------------------------------------------------------
   | Write data to FFD
@@ -199,24 +224,32 @@ void exchangeData(double t0, double dt, double *temHea0, double heaConvec,
 
   modelicaDataBuf->t = (float) t0;
   modelicaDataBuf->dt = (float) dt;
-  modelicaDataBuf->p = (float) p;
-  modelicaDataBuf->heaConvec = (float) heaConvec;
 
   // Copy the modelica data to shared memory
   for(i=0; i<boundaryDataBuf->nSur; i++) 
-    modelicaDataBuf->temHea[i] = (float) temHea0[i];
+    modelicaDataBuf->temHea[i] = (float) u[i];
 
   if(boundaryDataBuf->sha==1)
-    for(i=0; i<boundaryDataBuf->nConExtWin; i++) {
-      modelicaDataBuf->shaConSig[i] = (float) shaConSig[i];
-      modelicaDataBuf->shaAbsRad[i] = (float) shaAbsRad[i];
+    for(j=0; j<boundaryDataBuf->nConExtWin; j++) {
+      modelicaDataBuf->shaConSig[j] = (float) u[i+j];
+      modelicaDataBuf->shaAbsRad[j] = (float) u[i+j+boundaryDataBuf->nConExtWin];
     }
+  i = i + 2*boundaryDataBuf->nConExtWin;
+  
+  modelicaDataBuf->heaConvec = (float) u[i]; 
+  i++;
+  
+  modelicaDataBuf->latentHeat = (float) u[i];
+  i++;
 
-  for(i=0; i<boundaryDataBuf->nPorts; i++) {
-    modelicaDataBuf->mFloRatPor[i] = (float) mFloRatPor0[i];
-    modelicaDataBuf->TPor[i] = (float) TPor0[i];
-    modelicaDataBuf->XiPor[i] = (float) XiPor0[i];
-    modelicaDataBuf->CPor[i] = (float) CPor0[i];
+  modelicaDataBuf->p = (float) u[i];
+  i++;
+ 
+  for(j=0; j<boundaryDataBuf->nPorts; j++) {
+    modelicaDataBuf->mFloRatPor[j] = (float) u[i+j];
+    modelicaDataBuf->TPor[j] = (float) u[i+j+boundaryDataBuf->nPorts];
+    modelicaDataBuf->XiPor[j] = (float) u[i+j+2*boundaryDataBuf->nPorts];
+    modelicaDataBuf->CPor[j] = (float) u[i+j+3*boundaryDataBuf->nPorts];;
   }
 
   // Set the flag to new data
@@ -226,22 +259,26 @@ void exchangeData(double t0, double dt, double *temHea0, double heaConvec,
   while(ffdDataBuf->flag!=1)
     Sleep(1000);
 
-  // Copy data memory from shared memory
+  /*-----------------------------------------------------------------------
+  | Copy data memory from shared memory
+  ------------------------------------------------------------------------*/
   for(i=0; i<boundaryDataBuf->nSur; i++) 
-    temHea1[i] = ffdDataBuf->temHea[i];
+    y[i] = ffdDataBuf->temHea[i];
 
-  TRoo = ffdDataBuf->TRoo;
+
+  y[i] = ffdDataBuf->TRoo;
   
   if(boundaryDataBuf->sha==1)
-    for(i=0; i<boundaryDataBuf->nConExtWin; i++) {
-      TSha[i] = ffdDataBuf->TSha[i];
+    for(j=0; j<boundaryDataBuf->nConExtWin; j++) {
+      y[i+j] = ffdDataBuf->TSha[j];
     }
 
+  i = i + boundaryDataBuf->nConExtWin;
 
-  for(i=0; i<boundaryDataBuf->nPorts; i++) {
-    TPor1[i] = ffdDataBuf->TPor[i];
-    XiPor1[i] = ffdDataBuf->XiPor[i];
-    CPor1[i] = ffdDataBuf->CPor[i];
+  for(j=0; j<boundaryDataBuf->nPorts; j++) {
+    y[j+i] = ffdDataBuf->TPor[j];
+    y[j+i+boundaryDataBuf->nPorts] = ffdDataBuf->XiPor[j];
+    y[j+i+2*boundaryDataBuf->nPorts] = ffdDataBuf->CPor[j];
   }
 
   printf("\n FFD: time=%f, status=%d\n", ffdDataBuf->t,ffdDataBuf->flag);
@@ -252,6 +289,7 @@ void exchangeData(double t0, double dt, double *temHea0, double heaConvec,
   // Update the data status
   ffdDataBuf->flag = 0;
 
+  return 0;
 } // End of exchangeData()
 
 /******************************************************************************

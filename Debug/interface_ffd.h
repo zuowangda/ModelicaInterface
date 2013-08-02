@@ -1,13 +1,11 @@
  __declspec(dllexport)
-extern int instantiate(int nSur, int nConExtWin, int nPorts, int sha,
-                char **name, float *are, float *til, int *bouCon);
+extern int instantiate(char **name, double *A, double *til, int *bouCon, int haveSensor,
+                char **sensorName, int haveShade, int nSur, int nSen,
+                int nConExtWin, int nPorts );
 
  __declspec(dllexport)
-extern void exchangeData(double t0, double dt, double *temHea0, double heaConvec, 
-                  double *shaConSig, double *shaAbsRad, double p, 
-                  double *mFloRatPor0, double *TPor0, double *XiPor0, double *CPor0,
-                  double t1, double *temHea1, double TRoo, double *TSha, 
-                  double *TPor1, double *XiPor1, double *CPor1);
+extern int exchangeData(double t0, double dt, double *u, int nU, int nY, 
+                 double t1, double *y);
 
 __declspec(dllexport)
 extern void terminate_cosimulation( );
