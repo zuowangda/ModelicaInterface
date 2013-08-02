@@ -9,8 +9,6 @@
 
 #pragma comment(lib, "user32.lib")
 
-
-
 //typedef struct {
 //  float t;
 //  int status;
