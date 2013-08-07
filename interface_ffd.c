@@ -9,21 +9,6 @@
 
 #pragma comment(lib, "user32.lib")
 
-//typedef struct {
-//  float t;
-//  int status;
-//  float number[3];
-//  char message[20];
-//}ffdSharedData;
-//
-//typedef struct {
-//  float t;
-//  int status;
-//  float arr[3];
-//  float *testdata;
-//  char message[30];
-//}ModelicaSharedData;
-
 HANDLE ffdDataMapFile;
 HANDLE modelicaDataMapFile;
 HANDLE boundaryDataMapFile;
@@ -34,9 +19,10 @@ BoundarySharedData *boundaryDataBuf;
 /******************************************************************************
 | Start the memory management and FFD
 ******************************************************************************/
-int instantiate(char **name, double *A, double *til, int *bouCon, int haveSensor,
+int instantiate(char **name, double *A, double *til, int *bouCon, 
+                int nPorts, char** portName, int haveSensor,
                 char **sensorName, int haveShade, int nSur, int nSen,
-                int nConExtWin, int nPorts )
+                int nConExtWin)
 {
   int i, nBou;
   printf("interface_ffd.c: Start to create shared memory.\n");
@@ -147,12 +133,12 @@ int instantiate(char **name, double *A, double *til, int *bouCon, int haveSensor
 
   nBou = nSur + nPorts;
 
-  boundaryDataBuf->name = (char**) malloc(nBou*sizeof(char *));
+  boundaryDataBuf->name = (char**) malloc(nSur*sizeof(char *));
   boundaryDataBuf->are = (float *) malloc(nSur*sizeof(float));
   boundaryDataBuf->til = (float *) malloc(nSur*sizeof(float));
   boundaryDataBuf->bouCon = (int *) malloc(nSur*sizeof(int));
   
-  for(i=0; i<nBou; i++) {
+  for(i=0; i<nSur; i++) {
     boundaryDataBuf->name[i] = (char *)malloc(sizeof(char) *strlen(name[i]));
     strcpy(boundaryDataBuf->name[i], name[i]);
     printf("Boundary name:%s\n", boundaryDataBuf->name[i]);
@@ -165,6 +151,13 @@ int instantiate(char **name, double *A, double *til, int *bouCon, int haveSensor
 
     boundaryDataBuf->bouCon[i] = bouCon[i];
     printf("\tbouCon->bouCon:%d->%d \n\n", bouCon[i], boundaryDataBuf->bouCon[i]);
+  }
+
+  boundaryDataBuf->portName = (char**) malloc(nPorts*sizeof(char *));
+  for(i=0; i<nPorts; i++) {
+    boundaryDataBuf->portName[i] = (char *)malloc(sizeof(char) *strlen(portName[i]));
+    strcpy(boundaryDataBuf->portName[i], portName[i]);
+    printf("Boundary name:%s\n", boundaryDataBuf->portName[i]);
   }
 
   if(haveSensor) {
@@ -206,11 +199,13 @@ int instantiate(char **name, double *A, double *til, int *bouCon, int haveSensor
 /******************************************************************************
 | Exchange data between Modelica and Shared Memory
 ******************************************************************************/
-int exchangeData(double t0, double dt, double *u, int nU, int nY, 
-                 double t1, double *y)
+void exchangeData(double t0, double dt, double *u, int nU, int nY,
+                 double *t1, double *y, int *retVal)
 {
   int i, j, imax = 10000;
-
+  
+  printf("Interface_ffd.c: start to exchagne data\n");
+  getchar();
   /*--------------------------------------------------------------------------
   | Write data to FFD
   | Command: 
@@ -219,24 +214,31 @@ int exchangeData(double t0, double dt, double *u, int nU, int nY,
   |  1: data waiting for the other program to read
   --------------------------------------------------------------------------*/
   // If previous data hasn't been read, wait
-  while(modelicaDataBuf->flag==1)
+  while(modelicaDataBuf->flag=!0)
     Sleep(1000);
 
   modelicaDataBuf->t = (float) t0;
   modelicaDataBuf->dt = (float) dt;
 
+  printf("interface_ffd.c: wrtie data at %f with dt=%f\n", modelicaDataBuf->t, modelicaDataBuf->dt);
+  getchar();
   // Copy the modelica data to shared memory
-  for(i=0; i<boundaryDataBuf->nSur; i++) 
+  for(i=0; i<boundaryDataBuf->nSur; i++) {
     modelicaDataBuf->temHea[i] = (float) u[i];
+    printf("temHea[%d] = %f\n", i, modelicaDataBuf->temHea[i]); 
+  }
 
   if(boundaryDataBuf->sha==1)
     for(j=0; j<boundaryDataBuf->nConExtWin; j++) {
       modelicaDataBuf->shaConSig[j] = (float) u[i+j];
       modelicaDataBuf->shaAbsRad[j] = (float) u[i+j+boundaryDataBuf->nConExtWin];
+      printf("shaConSig[%d] = %f, shaAbsRad[%d] = %f\n", modelicaDataBuf->shaConSig[j],
+        modelicaDataBuf->shaAbsRad[j]);
     }
   i = i + 2*boundaryDataBuf->nConExtWin;
   
   modelicaDataBuf->heaConvec = (float) u[i]; 
+  printf("heaConvec = %f\n", modelicaDataBuf->heaConvec);
   i++;
   
   modelicaDataBuf->latentHeat = (float) u[i];
@@ -289,7 +291,11 @@ int exchangeData(double t0, double dt, double *u, int nU, int nY,
   // Update the data status
   ffdDataBuf->flag = 0;
 
-  return 0;
+  *t1 = ffdDataBuf->t;
+  for(i=0; i<nY; i++)
+    y[i] = 273.15;
+
+  *retVal = 0;
 } // End of exchangeData()
 
 /******************************************************************************
