@@ -15,6 +15,7 @@ HANDLE boundaryDataMapFile;
 ffdSharedData *ffdDataBuf;
 ModelicaSharedData *modelicaDataBuf;
 BoundarySharedData *boundaryDataBuf;
+CosimulationData *cosim;
 
 /******************************************************************************
 | Start the memory management and FFD
@@ -22,11 +23,10 @@ BoundarySharedData *boundaryDataBuf;
 int instantiate(char **name, double *A, double *til, int *bouCon, 
                 int nPorts, char** portName, int haveSensor,
                 char **sensorName, int haveShade, int nSur, int nSen,
-                int nConExtWin)
-{
+                int nConExtWin) {
   int i, nBou;
   printf("interface_ffd.c: Start to create shared memory.\n");
-  getchar();
+
   /*---------------------------------------------------------------------------
   | Create named file mapping objects for specified files
   ---------------------------------------------------------------------------*/
@@ -53,26 +53,23 @@ int instantiate(char **name, double *A, double *til, int *bouCon,
                 boundaryDataName);                 // name of mapping object
 
   // Send warning if can not create shared memory
-  if(ffdDataMapFile==NULL)
-  {
+  if(ffdDataMapFile==NULL) {
     printf("Could not create file mapping object (%d).\n", 
             GetLastError());
     return GetLastError();
   }
-  else if(modelicaDataMapFile==NULL)
-  {
+  else if(modelicaDataMapFile==NULL) {
     printf("Could not create file mapping object (%d).\n", 
             GetLastError());
     return GetLastError();
   }
-  else if(boundaryDataMapFile==NULL)
-  {
+  else if(boundaryDataMapFile==NULL) {
     printf("Could not create file mapping object (%d).\n", 
             GetLastError());
     return GetLastError();
   }
 
-  printf("interface-ffd.c: Created file objects.\n");
+  printf("interface_ffd.c: Created file objects.\n");
   /*---------------------------------------------------------------------------
   | Mps a view of a file mapping into the address space of a calling process
   ---------------------------------------------------------------------------*/
@@ -92,8 +89,7 @@ int instantiate(char **name, double *A, double *til, int *bouCon,
                       0,
                       BUF_BOUNDARY_SIZE);
 
-  if(ffdDataBuf == NULL)
-  {
+  if(ffdDataBuf == NULL) {
     printf("Could not map view of file (%d).\n",
             GetLastError());
     CloseHandle(ffdDataMapFile);
@@ -114,7 +110,11 @@ int instantiate(char **name, double *A, double *til, int *bouCon,
     return 1;
   }
 
-  printf("interface-ffd.c: Created mapping.\n");
+  cosim = (CosimulationData *) malloc(sizeof(CosimulationData));
+  cosim->para = (ParameterSharedData *) malloc(sizeof(ParameterSharedData));  
+  cosim->modelica = (ModelicaSharedData *) malloc(sizeof(ModelicaSharedData)); 
+  cosim->ffd = (ffdSharedData *) malloc(sizeof(ffdSharedData)); 
+  printf("interface_ffd.c: Created memory mapping for data exhcange.\n");
 
   /*---------------------------------------------------------------------------
   | allocate the memory and assign the data
@@ -124,6 +124,12 @@ int instantiate(char **name, double *A, double *til, int *bouCon,
   boundaryDataBuf->nConExtWin = nConExtWin;
   boundaryDataBuf->nPorts = nPorts;
   boundaryDataBuf->sha = haveShade;
+  cosim->para->nSur = nSur;
+  cosim->para->nSen = nSen;
+  cosim->para->nConExtWin= nConExtWin;
+  cosim->para->nPorts = nPorts;
+  cosim->para->sha = haveShade;
+
 
   printf("interface_ffd.c: Number of surfaces: %d\n", boundaryDataBuf->nSur);
   printf("interface_ffd.c: Number of sensors: %d\n", boundaryDataBuf->nSen);
@@ -137,7 +143,14 @@ int instantiate(char **name, double *A, double *til, int *bouCon,
   boundaryDataBuf->are = (float *) malloc(nSur*sizeof(float));
   boundaryDataBuf->til = (float *) malloc(nSur*sizeof(float));
   boundaryDataBuf->bouCon = (int *) malloc(nSur*sizeof(int));
+
+  cosim->para->name = (char**) malloc(nSur*sizeof(char *));
+  cosim->para->are = (float *) malloc(nSur*sizeof(float));
+  cosim->para->til = (float *) malloc(nSur*sizeof(float));
+  cosim->para->bouCon = (int *) malloc(nSur*sizeof(int));
   
+
+
   for(i=0; i<nSur; i++) {
     boundaryDataBuf->name[i] = (char *)malloc(sizeof(char) *strlen(name[i]));
     strcpy(boundaryDataBuf->name[i], name[i]);
@@ -191,6 +204,7 @@ int instantiate(char **name, double *A, double *til, int *bouCon,
   ffdDataBuf->CPor = (float *) malloc(nPorts * sizeof(float));
   
   printf("interface_ffd.c: initialized shared memory.\n");
+  UnmapViewOfFile(modelicaDataBuf);
   getchar();
   return 0;
 } // End of instantiate()
@@ -200,8 +214,7 @@ int instantiate(char **name, double *A, double *til, int *bouCon,
 | Exchange data between Modelica and Shared Memory
 ******************************************************************************/
 void exchangeData(double t0, double dt, double *u, int nU, int nY,
-                 double *t1, double *y, int *retVal)
-{
+                 double *t1, double *y, int *retVal) {
   int i, j, imax = 10000;
   
   printf("Interface_ffd.c: start to exchagne data\n");
@@ -214,8 +227,16 @@ void exchangeData(double t0, double dt, double *u, int nU, int nY,
   |  1: data waiting for the other program to read
   --------------------------------------------------------------------------*/
   // If previous data hasn't been read, wait
-  while(modelicaDataBuf->flag=!0)
+  while(modelicaDataBuf->flag=!0) {
+    modelicaDataBuf = (ModelicaSharedData *) MapViewOfFile(modelicaDataMapFile,   // handle to map object
+                      FILE_MAP_ALL_ACCESS, // read/write permission
+                      0,
+                      0,
+                      BUF_MODELICA_SIZE);
+    printf("interface_ffd.c: Wating for the FFD to read my data.\n");
     Sleep(1000);
+
+  }
 
   modelicaDataBuf->t = (float) t0;
   modelicaDataBuf->dt = (float) dt;
