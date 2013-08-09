@@ -9,9 +9,26 @@
 
 CosimulationData *cosim;
 
-/******************************************************************************
-| Start the memory management and FFD
-******************************************************************************/
+///////////////////////////////////////////////////////////////////////////////
+/// Start the cosimulation
+///
+/// Allocate memory for the data exchange and launch FFD simulation
+///
+///\param name Pointer to the names of surfaces and fluid ports
+///\param A Pointer to the area of surfaces in the same order of name
+///\param til Pointer to the tilt of surface in the same order of name
+///\param bouCon Pointer to the type of thermal bundary condition in the 
+///       same order of name
+///\param nPorts Number of fluid ports
+///\param haveSensor Flag: 1->have sensor; 0->No sensor
+///\param sensorName Pointer to the names of the sensors used in CFD
+///\param haveShade Flag: 1->have shade; 0->no shade
+///\param nSur Number of surfaces
+///\param nSen Number of sensors
+///\param nConExtWin Number of exterior construction with windows
+///
+///\return 0 if no error occurred
+///////////////////////////////////////////////////////////////////////////////
 int instantiate(char **name, double *A, double *til, int *bouCon, 
                 int nPorts, char** portName, int haveSensor,
                 char **sensorName, int haveShade, int nSur, int nSen,
@@ -65,7 +82,7 @@ int instantiate(char **name, double *A, double *til, int *bouCon,
   cosim->para->portName = (char**) malloc(nPorts*sizeof(char *));
 
   for(i=0; i<nPorts; i++) {
-    cosim->para->portName[i] = (char *)malloc(sizeof(char) *strlen(portName[i]));
+    cosim->para->portName[i] = (char *)malloc(sizeof(char)*strlen(portName[i]));
     strcpy(cosim->para->portName[i], portName[i]);
     printf("Boundary name:%s\n", cosim->para->portName[i]);
   }
@@ -73,44 +90,46 @@ int instantiate(char **name, double *A, double *til, int *bouCon,
   if(haveSensor) {
     cosim->para->sensorName = (char **) malloc(nSen*sizeof(char *));
     for(i=0; i<nSen; i++) {
-      cosim->para->sensorName[i] = (char *)malloc(sizeof(char) * strlen(sensorName[i]));
+      cosim->para->sensorName[i] = (char *)malloc(sizeof(char)*strlen(sensorName[i]));
       strcpy(cosim->para->sensorName[i], sensorName[i]);
       printf("Sensor Name:%s\n", cosim->para->sensorName[i]);
     }
   }
 
-  cosim->modelica->flag = -1;
-  cosim->ffd->flag = -1;
+  // Set the flag to initial value
+  cosim->modelica->flag = 0;
+  cosim->ffd->flag = 0;
+  cosim->para->flag = 1;
 
-  cosim->modelica->temHea = (float *) malloc(nSur * sizeof(float));
+  cosim->modelica->temHea = (float *) malloc(nSur*sizeof(float));
   // Having a shade for window
   if(haveShade==1) {
-    cosim->modelica->shaConSig = (float *) malloc(nConExtWin * sizeof(float));
-    cosim->modelica->shaAbsRad = (float *) malloc(nConExtWin * sizeof(float));
+    cosim->modelica->shaConSig = (float *) malloc(nConExtWin*sizeof(float));
+    cosim->modelica->shaAbsRad = (float *) malloc(nConExtWin*sizeof(float));
   }
-  cosim->modelica->mFloRatPor = (float *) malloc(nPorts * sizeof(float));
-  cosim->modelica->TPor = (float *) malloc(nPorts * sizeof(float));
-  cosim->modelica->XiPor = (float *) malloc(nPorts * sizeof(float));
-  cosim->modelica->CPor = (float *) malloc(nPorts * sizeof(float));
+  cosim->modelica->mFloRatPor = (float *) malloc(nPorts*sizeof(float));
+  cosim->modelica->TPor = (float *) malloc(nPorts*sizeof(float));
+  cosim->modelica->XiPor = (float *) malloc(nPorts*sizeof(float));
+  cosim->modelica->CPor = (float *) malloc(nPorts*sizeof(float));
 
-  cosim->ffd->temHea = (float *) malloc(nSur * sizeof(float));
-  if(haveShade==1) cosim->ffd->TSha = (float *) malloc(nConExtWin * sizeof(float));
-  cosim->ffd->TPor = (float *) malloc(nPorts * sizeof(float));
-  cosim->ffd->XiPor = (float *) malloc(nPorts * sizeof(float));
-  cosim->ffd->CPor = (float *) malloc(nPorts * sizeof(float));
+  cosim->ffd->temHea = (float *) malloc(nSur*sizeof(float));
+  if(haveShade==1) cosim->ffd->TSha = (float *) malloc(nConExtWin*sizeof(float));
+  cosim->ffd->TPor = (float *) malloc(nPorts*sizeof(float));
+  cosim->ffd->XiPor = (float *) malloc(nPorts*sizeof(float));
+  cosim->ffd->CPor = (float *) malloc(nPorts*sizeof(float));
   
   printf("interface_ffd.c: Allocated memory for cosimulation data.\n");
 
   //**********************************************************************
   // Get a handle to the DLL module.
-  hinstLib = LoadLibrary(TEXT("FFD-DLL.dll")); 
+  hinstLib = LoadLibrary(TEXT("../../../FFD/FFD-DLL/FFD-DLL/Debug/FFD-DLL.dll")); 
 
   // If the handle is valid, try to get the function address.
   if(hinstLib != NULL) {
     ProcAdd = (MYPROC) GetProcAddress(hinstLib, "ffd_dll");
   }
-  else{
-    printf("instantiate(): Coudl not find dll handle.\n");
+  else {
+    printf("instantiate(): Could not find dll handle.\n");
     return 1;
   }
 
@@ -119,7 +138,7 @@ int instantiate(char **name, double *A, double *til, int *bouCon,
       ProcAdd(cosim);   //call function: passing pointer of NAME struct
     }
     else{
-      printf("instantiate: Could not find dll function address.\n");
+      printf("instantiate(): Could not find dll function address.\n");
       return 1;
     }
 
@@ -127,11 +146,22 @@ int instantiate(char **name, double *A, double *til, int *bouCon,
 } // End of instantiate()
 
 
-/******************************************************************************
-| Exchange data between Modelica and Shared Memory
-******************************************************************************/
-void exchangeData(double t0, double dt, double *u, int nU, int nY,
-                 double *t1, double *y, int *retVal) {
+///////////////////////////////////////////////////////////////////////////////
+/// Exchange the data between Modelica and CFD
+///
+/// Allocate memory for the data exchange and launch FFD simulation
+///
+///\param t0 Current time of integration for Modelica
+///\param dt Time step size for next synchronization define dby Modelica
+///\param u Pointer to the input data from Modleica to CFD
+///\param nU Number of inputs from Modelica to CFD
+///\param nY Number of outputs from CFD to Modelica
+///\param y Pointer to the output data from CFD to Modelica
+///
+///\return 0 if no error occurred
+///////////////////////////////////////////////////////////////////////////////
+int exchangeData(double t0, double dt, double *u, int nU, int nY,
+                 double *t1, double *y) {
   int i, j, imax = 10000;
   
   printf("---------------------------------------------------\n");
@@ -145,16 +175,17 @@ void exchangeData(double t0, double dt, double *u, int nU, int nY,
   --------------------------------------------------------------------------*/
   // If previous data hasn't been read, wait
   while(cosim->modelica->flag==1) {
-    printf("interface_ffd.c: Wating for the FFD to read my data.\n");
+    printf("exchangeData(): Waiting for the FFD to read my data.\n");
     Sleep(1000);
   }
 
-  printf("exchangeData(): Strat to write data");
+  printf("exchangeData(): Start to write data");
   cosim->modelica->t = (float) t0;
   cosim->modelica->dt = (float) dt;
 
-  printf("interface_ffd.c: wrtie data at %f with dt=%f\n", cosim->modelica->t, cosim->modelica->dt);
-  getchar();
+  printf("exchangeData():: wrtie data at %f with dt=%f\n", 
+         cosim->modelica->t, cosim->modelica->dt);
+
   // Copy the modelica data to shared memory
   for(i=0; i<cosim->para->nSur; i++) {
     cosim->modelica->temHea[i] = (float) u[i];
@@ -165,8 +196,9 @@ void exchangeData(double t0, double dt, double *u, int nU, int nY,
     for(j=0; j<cosim->para->nConExtWin; j++) {
       cosim->modelica->shaConSig[j] = (float) u[i+j];
       cosim->modelica->shaAbsRad[j] = (float) u[i+j+cosim->para->nConExtWin];
-      printf("shaConSig[%d] = %f, shaAbsRad[%d] = %f\n", cosim->modelica->shaConSig[j],
-        cosim->modelica->shaAbsRad[j]);
+      printf("shaConSig[%d] = %f, shaAbsRad[%d] = %f\n", 
+             cosim->modelica->shaConSig[j],
+             cosim->modelica->shaAbsRad[j]);
     }
   i = i + 2*cosim->para->nConExtWin;
   
@@ -215,8 +247,8 @@ void exchangeData(double t0, double dt, double *u, int nU, int nY,
     y[j+i+2*cosim->para->nPorts] = cosim->ffd->CPor[j];
   }
 
-  printf("\n FFD: time=%f, status=%d\n", cosim->ffd->t, cosim->ffd->flag);
-  printf("Modelica: time=%f, status=%d\n", cosim->modelica->t, cosim->modelica->flag);
+  printf("\n FFD: \t\ttime=%f, status=%d\n", cosim->ffd->t, cosim->ffd->flag);
+  printf("Modelica: \ttime=%f, status=%d\n", cosim->modelica->t, cosim->modelica->flag);
 
   // Update the data status
   cosim->ffd->flag = 0;
@@ -225,10 +257,44 @@ void exchangeData(double t0, double dt, double *u, int nU, int nY,
   for(i=0; i<nY; i++)
     y[i] = 273.15;
 
-  *retVal = 0;
+  return 0;
 } // End of exchangeData()
 
+///////////////////////////////////////////////////////////////////////////////
+/// Terminate the co-simulation
+///
+///\return 0 if no error occurred
+///////////////////////////////////////////////////////////////////////////////
+int stopCosim( ) {
+  int i = 0, imax = 10000, flag;
+  
+  cosim->para->flag = 0;
+  printf("stopCosim( ): Set cosim->para->flag = %d\n", cosim->para->flag);
+  getchar();
+
+  while(cosim->para->flag==0 && i<imax) {
+    Sleep(10000);
+    i++;
+  }
 
 
+  if(i<imax) {
+    printf("Successfully stopped the FFD simulation.\n");
+    flag = 0;
+  }
+  else {
+    printf("stopFFD(): Could not stop the FFD simulation in reqruied time.\n");
+    flag = 1;
+  }
+
+  getchar();
+
+  free(cosim->para);
+  free(cosim->modelica);
+  free(cosim->ffd);
+  free(cosim);
+
+  return flag;
+} // End of stopFFD
 
 
