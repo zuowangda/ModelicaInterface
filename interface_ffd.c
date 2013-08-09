@@ -5,16 +5,8 @@
 #include "Debug/interface_ffd.h"
 #include "../FFD-DLL/Fast-Fluid-Dynamics/modelica_ffd_common.h"
 
-#define BUF_SIZE 256
-
 #pragma comment(lib, "user32.lib")
 
-HANDLE ffdDataMapFile;
-HANDLE modelicaDataMapFile;
-HANDLE boundaryDataMapFile;
-ffdSharedData *ffdDataBuf;
-ModelicaSharedData *modelicaDataBuf;
-BoundarySharedData *boundaryDataBuf;
 CosimulationData *cosim;
 
 /******************************************************************************
@@ -25,187 +17,112 @@ int instantiate(char **name, double *A, double *til, int *bouCon,
                 char **sensorName, int haveShade, int nSur, int nSen,
                 int nConExtWin) {
   int i, nBou;
-  printf("interface_ffd.c: Start to create shared memory.\n");
+  //*******************For call FFD-DLL.dll**********************
+  typedef int (*MYPROC)(CosimulationData *);
+  HINSTANCE hinstLib; 
+  MYPROC ProcAdd;
+//*************************************************************
 
-  /*---------------------------------------------------------------------------
-  | Create named file mapping objects for specified files
-  ---------------------------------------------------------------------------*/
-  ffdDataMapFile = CreateFileMapping(
-                INVALID_HANDLE_VALUE,    // use paging file
-                NULL,                    // default security
-                PAGE_READWRITE,          // read/write access
-                0,                       // maximum object size (high-order DWORD)
-                BUF_FFD_SIZE,                // maximum object size (low-order DWORD)
-                ffdDataName);                 // name of mapping object
-  modelicaDataMapFile = CreateFileMapping(
-                INVALID_HANDLE_VALUE,    // use paging file
-                NULL,                    // default security
-                PAGE_READWRITE,          // read/write access
-                0,                       // maximum object size (high-order DWORD)
-                BUF_MODELICA_SIZE,                // maximum object size (low-order DWORD)
-                modelicaDataName);                 // name of mapping object
-  boundaryDataMapFile = CreateFileMapping(
-                INVALID_HANDLE_VALUE,    // use paging file
-                NULL,                    // default security
-                PAGE_READWRITE,          // read/write access
-                0,                       // maximum object size (high-order DWORD)
-                BUF_BOUNDARY_SIZE,                // maximum object size (low-order DWORD)
-                boundaryDataName);                 // name of mapping object
-
-  // Send warning if can not create shared memory
-  if(ffdDataMapFile==NULL) {
-    printf("Could not create file mapping object (%d).\n", 
-            GetLastError());
-    return GetLastError();
-  }
-  else if(modelicaDataMapFile==NULL) {
-    printf("Could not create file mapping object (%d).\n", 
-            GetLastError());
-    return GetLastError();
-  }
-  else if(boundaryDataMapFile==NULL) {
-    printf("Could not create file mapping object (%d).\n", 
-            GetLastError());
-    return GetLastError();
-  }
-
-  printf("interface_ffd.c: Created file objects.\n");
-  /*---------------------------------------------------------------------------
-  | Mps a view of a file mapping into the address space of a calling process
-  ---------------------------------------------------------------------------*/
-  ffdDataBuf = (ffdSharedData *) MapViewOfFile(ffdDataMapFile,   // handle to map object
-                      FILE_MAP_ALL_ACCESS, // read/write permission
-                      0,
-                      0,
-                      BUF_FFD_SIZE);
-  modelicaDataBuf = (ModelicaSharedData *) MapViewOfFile(modelicaDataMapFile,   // handle to map object
-                      FILE_MAP_ALL_ACCESS, // read/write permission
-                      0,
-                      0,
-                      BUF_MODELICA_SIZE);
-  boundaryDataBuf = (BoundarySharedData *) MapViewOfFile(boundaryDataMapFile,   // handle to map object
-                      FILE_MAP_ALL_ACCESS, // read/write permission
-                      0,
-                      0,
-                      BUF_BOUNDARY_SIZE);
-
-  if(ffdDataBuf == NULL) {
-    printf("Could not map view of file (%d).\n",
-            GetLastError());
-    CloseHandle(ffdDataMapFile);
-    return 1;
-  }
-  if(modelicaDataBuf == NULL) 
-  {
-    printf("Could not map view of file (%d).\n",
-            GetLastError());
-    CloseHandle(modelicaDataMapFile);
-    return 1;
-  }
-  if(boundaryDataBuf == NULL) 
-  {
-    printf("Could not map view of file (%d).\n",
-            GetLastError());
-    CloseHandle(boundaryDataMapFile);
-    return 1;
-  }
+  printf("interface_ffd.c: Start to allcoate memory for data exchange.\n");
 
   cosim = (CosimulationData *) malloc(sizeof(CosimulationData));
   cosim->para = (ParameterSharedData *) malloc(sizeof(ParameterSharedData));  
   cosim->modelica = (ModelicaSharedData *) malloc(sizeof(ModelicaSharedData)); 
   cosim->ffd = (ffdSharedData *) malloc(sizeof(ffdSharedData)); 
-  printf("interface_ffd.c: Created memory mapping for data exhcange.\n");
+
 
   /*---------------------------------------------------------------------------
   | allocate the memory and assign the data
   --------------------------------------------------------------------------*/
-  boundaryDataBuf->nSur = nSur;
-  boundaryDataBuf->nSen = nSen;
-  boundaryDataBuf->nConExtWin = nConExtWin;
-  boundaryDataBuf->nPorts = nPorts;
-  boundaryDataBuf->sha = haveShade;
   cosim->para->nSur = nSur;
   cosim->para->nSen = nSen;
   cosim->para->nConExtWin= nConExtWin;
   cosim->para->nPorts = nPorts;
   cosim->para->sha = haveShade;
 
-
-  printf("interface_ffd.c: Number of surfaces: %d\n", boundaryDataBuf->nSur);
-  printf("interface_ffd.c: Number of sensors: %d\n", boundaryDataBuf->nSen);
-  printf("interface_ffd.c: Number of exterior construction with windows: %d\n", boundaryDataBuf->nConExtWin);
-  printf("interface_ffd.c: have shade: %d\n", boundaryDataBuf->sha);
-
-
   nBou = nSur + nPorts;
-
-  boundaryDataBuf->name = (char**) malloc(nSur*sizeof(char *));
-  boundaryDataBuf->are = (float *) malloc(nSur*sizeof(float));
-  boundaryDataBuf->til = (float *) malloc(nSur*sizeof(float));
-  boundaryDataBuf->bouCon = (int *) malloc(nSur*sizeof(int));
 
   cosim->para->name = (char**) malloc(nSur*sizeof(char *));
   cosim->para->are = (float *) malloc(nSur*sizeof(float));
   cosim->para->til = (float *) malloc(nSur*sizeof(float));
   cosim->para->bouCon = (int *) malloc(nSur*sizeof(int));
-  
 
+  for(i=0; i<nSur; i++) { 
+    cosim->para->name[i] = (char *)malloc(sizeof(char) *strlen(name[i]));
+    strcpy(cosim->para->name[i], name[i]);
+    printf("Boundary name:%s\n", cosim->para->name[i]);
 
-  for(i=0; i<nSur; i++) {
-    boundaryDataBuf->name[i] = (char *)malloc(sizeof(char) *strlen(name[i]));
-    strcpy(boundaryDataBuf->name[i], name[i]);
-    printf("Boundary name:%s\n", boundaryDataBuf->name[i]);
+    cosim->para->are[i] = A[i];
+    printf("\tA->Area:%f->%f [m2]\n", A[i], cosim->para->are[i]);
 
-    boundaryDataBuf->are[i] = A[i];
-    printf("\tA->Area:%f->%f [m2]\n", A[i], boundaryDataBuf->are[i]);
+    cosim->para->til[i] = til[i];
+    printf("\tTilt->Tilt:%f->%f [deg]\n", til[i], cosim->para->til[i]);
 
-    boundaryDataBuf->til[i] = til[i];
-    printf("\tTilt->Tilt:%f->%f [deg]\n", til[i], boundaryDataBuf->til[i]);
-
-    boundaryDataBuf->bouCon[i] = bouCon[i];
-    printf("\tbouCon->bouCon:%d->%d \n\n", bouCon[i], boundaryDataBuf->bouCon[i]);
+    cosim->para->bouCon[i] = bouCon[i];
+    printf("\tbouCon->bouCon:%d->%d \n\n", bouCon[i], cosim->para->bouCon[i]);
   }
 
-  boundaryDataBuf->portName = (char**) malloc(nPorts*sizeof(char *));
+  cosim->para->portName = (char**) malloc(nPorts*sizeof(char *));
+
   for(i=0; i<nPorts; i++) {
-    boundaryDataBuf->portName[i] = (char *)malloc(sizeof(char) *strlen(portName[i]));
-    strcpy(boundaryDataBuf->portName[i], portName[i]);
-    printf("Boundary name:%s\n", boundaryDataBuf->portName[i]);
+    cosim->para->portName[i] = (char *)malloc(sizeof(char) *strlen(portName[i]));
+    strcpy(cosim->para->portName[i], portName[i]);
+    printf("Boundary name:%s\n", cosim->para->portName[i]);
   }
 
   if(haveSensor) {
-    boundaryDataBuf->sensorName = (char **) malloc(nSen*sizeof(char *));
+    cosim->para->sensorName = (char **) malloc(nSen*sizeof(char *));
     for(i=0; i<nSen; i++) {
-      boundaryDataBuf->sensorName[i] = (char *)malloc(sizeof(char) * strlen(sensorName[i]));
-      strcpy(boundaryDataBuf->sensorName[i], sensorName[i]);
-      printf("Sensor Name:%s\n", boundaryDataBuf->sensorName[i]);
+      cosim->para->sensorName[i] = (char *)malloc(sizeof(char) * strlen(sensorName[i]));
+      strcpy(cosim->para->sensorName[i], sensorName[i]);
+      printf("Sensor Name:%s\n", cosim->para->sensorName[i]);
     }
   }
 
-  modelicaDataBuf->flag = -1;
-  ffdDataBuf->flag = -1;
+  cosim->modelica->flag = -1;
+  cosim->ffd->flag = -1;
 
-  modelicaDataBuf->temHea = (float *) malloc(nSur * sizeof(float));
+  cosim->modelica->temHea = (float *) malloc(nSur * sizeof(float));
   // Having a shade for window
   if(haveShade==1) {
-    modelicaDataBuf->shaConSig = (float *) malloc(nConExtWin * sizeof(float));
-    modelicaDataBuf->shaAbsRad = (float *) malloc(nConExtWin * sizeof(float));
+    cosim->modelica->shaConSig = (float *) malloc(nConExtWin * sizeof(float));
+    cosim->modelica->shaAbsRad = (float *) malloc(nConExtWin * sizeof(float));
   }
-  modelicaDataBuf->mFloRatPor = (float *) malloc(nPorts * sizeof(float));
-  modelicaDataBuf->TPor = (float *) malloc(nPorts * sizeof(float));
-  modelicaDataBuf->XiPor = (float *) malloc(nPorts * sizeof(float));
-  modelicaDataBuf->CPor = (float *) malloc(nPorts * sizeof(float));
+  cosim->modelica->mFloRatPor = (float *) malloc(nPorts * sizeof(float));
+  cosim->modelica->TPor = (float *) malloc(nPorts * sizeof(float));
+  cosim->modelica->XiPor = (float *) malloc(nPorts * sizeof(float));
+  cosim->modelica->CPor = (float *) malloc(nPorts * sizeof(float));
 
-
-  ffdDataBuf->temHea = (float *) malloc(nSur * sizeof(float));
-  if(haveShade==1) ffdDataBuf->TSha = (float *) malloc(nConExtWin * sizeof(float));
-  ffdDataBuf->TPor = (float *) malloc(nPorts * sizeof(float));
-  ffdDataBuf->XiPor = (float *) malloc(nPorts * sizeof(float));
-  ffdDataBuf->CPor = (float *) malloc(nPorts * sizeof(float));
+  cosim->ffd->temHea = (float *) malloc(nSur * sizeof(float));
+  if(haveShade==1) cosim->ffd->TSha = (float *) malloc(nConExtWin * sizeof(float));
+  cosim->ffd->TPor = (float *) malloc(nPorts * sizeof(float));
+  cosim->ffd->XiPor = (float *) malloc(nPorts * sizeof(float));
+  cosim->ffd->CPor = (float *) malloc(nPorts * sizeof(float));
   
-  printf("interface_ffd.c: initialized shared memory.\n");
-  UnmapViewOfFile(modelicaDataBuf);
-  getchar();
+  printf("interface_ffd.c: Allocated memory for cosimulation data.\n");
+
+  //**********************************************************************
+  // Get a handle to the DLL module.
+  hinstLib = LoadLibrary(TEXT("FFD-DLL.dll")); 
+
+  // If the handle is valid, try to get the function address.
+  if(hinstLib != NULL) {
+    ProcAdd = (MYPROC) GetProcAddress(hinstLib, "ffd_dll");
+  }
+  else{
+    printf("instantiate(): Coudl not find dll handle.\n");
+    return 1;
+  }
+
+  // If the function address is valid, call the function.
+    if (NULL!=ProcAdd) {
+      ProcAdd(cosim);   //call function: passing pointer of NAME struct
+    }
+    else{
+      printf("instantiate: Could not find dll function address.\n");
+      return 1;
+    }
+
   return 0;
 } // End of instantiate()
 
@@ -217,8 +134,8 @@ void exchangeData(double t0, double dt, double *u, int nU, int nY,
                  double *t1, double *y, int *retVal) {
   int i, j, imax = 10000;
   
-  printf("Interface_ffd.c: start to exchagne data\n");
-  getchar();
+  printf("---------------------------------------------------\n");
+  printf("exchangeData(): start to exchagne data at t=%f\n", t0);
   /*--------------------------------------------------------------------------
   | Write data to FFD
   | Command: 
@@ -227,125 +144,89 @@ void exchangeData(double t0, double dt, double *u, int nU, int nY,
   |  1: data waiting for the other program to read
   --------------------------------------------------------------------------*/
   // If previous data hasn't been read, wait
-  while(modelicaDataBuf->flag=!0) {
-    modelicaDataBuf = (ModelicaSharedData *) MapViewOfFile(modelicaDataMapFile,   // handle to map object
-                      FILE_MAP_ALL_ACCESS, // read/write permission
-                      0,
-                      0,
-                      BUF_MODELICA_SIZE);
+  while(cosim->modelica->flag==1) {
     printf("interface_ffd.c: Wating for the FFD to read my data.\n");
     Sleep(1000);
-
   }
 
-  modelicaDataBuf->t = (float) t0;
-  modelicaDataBuf->dt = (float) dt;
+  printf("exchangeData(): Strat to write data");
+  cosim->modelica->t = (float) t0;
+  cosim->modelica->dt = (float) dt;
 
-  printf("interface_ffd.c: wrtie data at %f with dt=%f\n", modelicaDataBuf->t, modelicaDataBuf->dt);
+  printf("interface_ffd.c: wrtie data at %f with dt=%f\n", cosim->modelica->t, cosim->modelica->dt);
   getchar();
   // Copy the modelica data to shared memory
-  for(i=0; i<boundaryDataBuf->nSur; i++) {
-    modelicaDataBuf->temHea[i] = (float) u[i];
-    printf("temHea[%d] = %f\n", i, modelicaDataBuf->temHea[i]); 
+  for(i=0; i<cosim->para->nSur; i++) {
+    cosim->modelica->temHea[i] = (float) u[i];
+    printf("temHea[%d] = %f\n", i, cosim->modelica->temHea[i]); 
   }
 
-  if(boundaryDataBuf->sha==1)
-    for(j=0; j<boundaryDataBuf->nConExtWin; j++) {
-      modelicaDataBuf->shaConSig[j] = (float) u[i+j];
-      modelicaDataBuf->shaAbsRad[j] = (float) u[i+j+boundaryDataBuf->nConExtWin];
-      printf("shaConSig[%d] = %f, shaAbsRad[%d] = %f\n", modelicaDataBuf->shaConSig[j],
-        modelicaDataBuf->shaAbsRad[j]);
+  if(cosim->para->sha==1)
+    for(j=0; j<cosim->para->nConExtWin; j++) {
+      cosim->modelica->shaConSig[j] = (float) u[i+j];
+      cosim->modelica->shaAbsRad[j] = (float) u[i+j+cosim->para->nConExtWin];
+      printf("shaConSig[%d] = %f, shaAbsRad[%d] = %f\n", cosim->modelica->shaConSig[j],
+        cosim->modelica->shaAbsRad[j]);
     }
-  i = i + 2*boundaryDataBuf->nConExtWin;
+  i = i + 2*cosim->para->nConExtWin;
   
-  modelicaDataBuf->heaConvec = (float) u[i]; 
-  printf("heaConvec = %f\n", modelicaDataBuf->heaConvec);
+  cosim->modelica->heaConvec = (float) u[i]; 
+  printf("heaConvec = %f\n", cosim->modelica->heaConvec);
   i++;
   
-  modelicaDataBuf->latentHeat = (float) u[i];
+  cosim->modelica->latentHeat = (float) u[i];
   i++;
 
-  modelicaDataBuf->p = (float) u[i];
+  cosim->modelica->p = (float) u[i];
   i++;
  
-  for(j=0; j<boundaryDataBuf->nPorts; j++) {
-    modelicaDataBuf->mFloRatPor[j] = (float) u[i+j];
-    modelicaDataBuf->TPor[j] = (float) u[i+j+boundaryDataBuf->nPorts];
-    modelicaDataBuf->XiPor[j] = (float) u[i+j+2*boundaryDataBuf->nPorts];
-    modelicaDataBuf->CPor[j] = (float) u[i+j+3*boundaryDataBuf->nPorts];;
+  for(j=0; j<cosim->para->nPorts; j++) {
+    cosim->modelica->mFloRatPor[j] = (float) u[i+j];
+    cosim->modelica->TPor[j] = (float) u[i+j+cosim->para->nPorts];
+    cosim->modelica->XiPor[j] = (float) u[i+j+2*cosim->para->nPorts];
+    cosim->modelica->CPor[j] = (float) u[i+j+3*cosim->para->nPorts];;
   }
 
   // Set the flag to new data
-  modelicaDataBuf->flag = 1;
+  cosim->modelica->flag = 1;
 
   // If the data is not ready or not updated, check again
-  while(ffdDataBuf->flag!=1)
+  while(cosim->ffd->flag!=1)
     Sleep(1000);
 
   /*-----------------------------------------------------------------------
   | Copy data memory from shared memory
   ------------------------------------------------------------------------*/
-  for(i=0; i<boundaryDataBuf->nSur; i++) 
-    y[i] = ffdDataBuf->temHea[i];
+  for(i=0; i<cosim->para->nSur; i++) 
+    y[i] = cosim->ffd->temHea[i];
 
-
-  y[i] = ffdDataBuf->TRoo;
+  y[i] = cosim->ffd->TRoo;
   
-  if(boundaryDataBuf->sha==1)
-    for(j=0; j<boundaryDataBuf->nConExtWin; j++) {
-      y[i+j] = ffdDataBuf->TSha[j];
+  if(cosim->para->sha==1)
+    for(j=0; j<cosim->para->nConExtWin; j++) {
+      y[i+j] = cosim->ffd->TSha[j];
     }
 
-  i = i + boundaryDataBuf->nConExtWin;
+  i = i + cosim->para->nConExtWin;
 
-  for(j=0; j<boundaryDataBuf->nPorts; j++) {
-    y[j+i] = ffdDataBuf->TPor[j];
-    y[j+i+boundaryDataBuf->nPorts] = ffdDataBuf->XiPor[j];
-    y[j+i+2*boundaryDataBuf->nPorts] = ffdDataBuf->CPor[j];
+  for(j=0; j<cosim->para->nPorts; j++) {
+    y[j+i] = cosim->ffd->TPor[j];
+    y[j+i+cosim->para->nPorts] = cosim->ffd->XiPor[j];
+    y[j+i+2*cosim->para->nPorts] = cosim->ffd->CPor[j];
   }
 
-  printf("\n FFD: time=%f, status=%d\n", ffdDataBuf->t,ffdDataBuf->flag);
-//  printf("y1[0] = %f, y1[1] = %f, y1[2] = %f \n", y1[0], y1[1], y1[2]);
-  printf("Modelica: time=%f, status=%d\n", modelicaDataBuf->t,modelicaDataBuf->flag);
-//  printf("arr[0] = %f, arr[1] = %f, arr[2] = %f \n", modelicaDataBuf->arr[0], modelicaDataBuf->arr[1], modelicaDataBuf->arr[2]);
+  printf("\n FFD: time=%f, status=%d\n", cosim->ffd->t, cosim->ffd->flag);
+  printf("Modelica: time=%f, status=%d\n", cosim->modelica->t, cosim->modelica->flag);
 
   // Update the data status
-  ffdDataBuf->flag = 0;
+  cosim->ffd->flag = 0;
 
-  *t1 = ffdDataBuf->t;
+  *t1 = cosim->ffd->t;
   for(i=0; i<nY; i++)
     y[i] = 273.15;
 
   *retVal = 0;
 } // End of exchangeData()
-
-/******************************************************************************
-| Terminate the memory management program
-******************************************************************************/
-void terminate_cosimulation( )
-{
-  if(!UnmapViewOfFile(ffdDataBuf))
-    printf("Error in closing map view %d\n", GetLastError());
-  else
-    printf("Successfully closed data buffer for FFD.\n");
-  
-  if(!UnmapViewOfFile(modelicaDataBuf))
-    printf("Error in closing map view %d\n", GetLastError());
-  else
-    printf("Successfully closed data buffer for Modelica.\n");
-  
-  if(!CloseHandle(ffdDataMapFile))
-    printf("Error in closing handle %d\n", GetLastError());
-  else
-    printf("Successfully closed handle for FFD.\n");
-
-  if(!CloseHandle(modelicaDataMapFile))
-    printf("Error in closing handle %d\n", GetLastError());
-  else
-    printf("Successfully closed handle for Modelica.\n");
-
-  getchar();
-} // End of terminate()
 
 
 

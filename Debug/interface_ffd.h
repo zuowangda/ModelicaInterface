@@ -8,7 +8,3 @@ extern int instantiate(char **name, double *A, double *til, int *bouCon,
 extern void exchangeData(double t0, double dt, double *u, int nU, int nY,
                  double *t1, double *y, int *retVal);
 
-__declspec(dllexport)
-extern void terminate_cosimulation( );
-
-
