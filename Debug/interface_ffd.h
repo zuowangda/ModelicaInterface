@@ -9,20 +9,23 @@
 ///\param bouCon Pointer to the type of thermal bundary condition in the 
 ///       same order of name
 ///\param nPorts Number of fluid ports
+///\param portName Pointer to the name of fluid ports
 ///\param haveSensor Flag: 1->have sensor; 0->No sensor
 ///\param sensorName Pointer to the names of the sensors used in CFD
 ///\param haveShade Flag: 1->have shade; 0->no shade
 ///\param nSur Number of surfaces
 ///\param nSen Number of sensors
 ///\param nConExtWin Number of exterior construction with windows
+///\param nC Number of trace substances
+///\param nXi Number of species
 ///
 ///\return 0 if no error occurred
-/////////////////////////////////////////////////////////////////////////////// 
+///////////////////////////////////////////////////////////////////////////////
 __declspec(dllexport)
 extern int instantiate(char **name, double *A, double *til, int *bouCon, 
-                int nPorts, char** portNames, int haveSensor,
+                int nPorts, char** portName, int haveSensor,
                 char **sensorName, int haveShade, int nSur, int nSen,
-                int nConExtWin);
+                int nConExtWin, int nC, int nXi);
 
  ///////////////////////////////////////////////////////////////////////////////
 /// Exchange the data between Modelica and CFD
