@@ -295,19 +295,25 @@ int exchangeData(double t0, double dt, double *u, int nU, int nY,
 ///
 ///\return 0 if no error occurred
 ///////////////////////////////////////////////////////////////////////////////
+int sendStopCommand( ) {
+  cosim->para->flag = 0;
+  printf("sendStopCommand( ): Set cosim->para->flag = %d\n", cosim->para->flag);
+} // End of ssendStopCommand 
+
+///////////////////////////////////////////////////////////////////////////////
+/// Terminate the co-simulation
+///
+///\return 0 if no error occurred
+///////////////////////////////////////////////////////////////////////////////
 int stopCosim( ) {
   int i = 0, imax = 10000, flag;
   
-  cosim->para->flag = 0;
-  printf("stopCosim( ): Set cosim->para->flag = %d\n", cosim->para->flag);
-  getchar();
-
+  // Wait for the feedback from FFD
   while(cosim->para->flag==0 && i<imax) {
     Sleep(10000);
     i++;
   }
-
-
+  
   if(i<imax) {
     printf("Successfully stopped the FFD simulation.\n");
     flag = 0;
@@ -317,14 +323,12 @@ int stopCosim( ) {
     flag = 1;
   }
 
-  getchar();
-
   free(cosim->para);
   free(cosim->modelica);
   free(cosim->ffd);
   free(cosim);
 
   return flag;
-} // End of stopFFD
+} // End of stopCosim
 
 

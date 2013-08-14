@@ -45,6 +45,13 @@ extern int instantiate(char **name, double *A, double *til, int *bouCon,
 extern int exchangeData(double t0, double dt, double *u, int nU, int nY,
                  double *t1, double *y);
 
+///////////////////////////////////////////////////////////////////////////////
+/// Terminate the co-simulation
+///
+///\return No return needed
+///////////////////////////////////////////////////////////////////////////////
+ __declspec(dllexport)
+extern int sendStopCommand( );
 
  ///////////////////////////////////////////////////////////////////////////////
 /// Terminate the FFD simulation
